@@ -15,3 +15,12 @@ After installing Python, you need to install the required dependencies:
 pip install -r requirements.txt
 ```
 ##### (you might need to add `python3 -m` before the command or `python -m`) 
+
+# Configuring
+## 1. .chain file
+The cli will always try to load configuration from it first. The file must be located in the same directory as the main.py file.
+
+The default .chain file looks like this:
+```
+
+```
