@@ -14,3 +14,4 @@ After installing Python, you need to install the required dependencies:
 ```sh
 pip install -r requirements.txt
 ```
+##### (you might need to add `python3 -m` before the command or `python -m`) 
