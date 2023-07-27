@@ -1,31 +1,154 @@
-import gevent
-import gevent.socket
-import socket
-import sys
 from datetime import datetime
-from urwid_geventloop import GeventLoop
 from urwid import (ListBox, SimpleFocusListWalker, Frame, MainLoop, Edit, Text,
-                   ExitMainLoop)
+                   ExitMainLoop, AsyncioEventLoop)
+from threading import Thread
+from websockets import connect
+from asyncio import run, new_event_loop
+from sys import stdout, argv
+from os import _exit
+from os.path import dirname, realpath
+from shutil import get_terminal_size
+from time import time
+from textwrap import wrap
+dir = dirname(realpath(__file__))
+columns = get_terminal_size().columns - 1
+stdout.write("\x1b]2;chain (beta)\x07") # tries to set console title
+online_people = set()
+offline_people = set()
+
+try:
+    with open(dir + "/.chain") as file:
+        data = file.read()
+    data = data.split("\n")
+    def parse(a):
+        a = a.split(":")
+        a = [a[0], ":".join(a[1:])]
+        return list(map(lambda b: b.strip(), a))
+    config = dict(list(map(parse, data)))
+    assert len(set(config.keys()) - {"chain", "username"}) == 0
+    assert config["username"] != ""
+except:
+    config = {"chain": "wss://chain.laptop-cat.repl.co/w", "username": ""}
+
+if len(argv) > 1:
+    config["username"] = argv[1].strip().lower()
+
+if config["username"] == "":
+    config["username"] = input("please input a username\n> ").strip().lower()
+
+if len(config["username"]) < 4 or len(config["username"]) > 12:
+    print("username must be 4-12 characters")
+    exit(1)
+
+if not all(ch in "qwertyuiopasdfghjklzxcvbnm1234567890" for ch in config["username"]):
+    print("username must only contain characters from a-z, 0-9")
+    exit(1)
+
+async def wrapping(self, output):
+    parsed_anything = False
+    try:
+        async with connect(config["chain"] + "?u=" + config["username"]) as ws:
+            self.ws = ws
+            async for msg in ws:
+                parser(msg, output)
+                if not parsed_anything:
+                    parsed_anything = True
+    except:
+        if not parsed_anything:
+            print("username taken")
+        else:
+            print("something went wrong")
+        _exit(1)
+
+class Chatter:
+    def __init__(self, output):
+        self.ws = None
+        self.output = output
+    
+    def run(self):
+        Thread(target=run, args=(wrapping(self, self.output),)).start()
+    
+    def send_message(self, content):
+        if self.ws:
+            Thread(target=run, args=(self.ws.send(content), )).start()
+
+
+def parser(msg, output, historic=False, timestamp=None):
+    global online_people, offline_people
+    if timestamp == None:
+        timestamp = timeformat()
+    elif timestamp == "disable":
+        timestamp = ""
+    else:
+        timestamp = timeformat(datetime.fromtimestamp(datetime.now().timestamp() - timestamp))
+    for char in msg[1:13]:
+        if char == ":":
+            msg = msg.split(":")
+            msg[0] = msg[0] + ": "
+            content = ":".join(msg[1:])
+            whitespace = abs(columns - len(wrap(msg[0]+content+timestamp, columns+1)[-1])) * " "
+            msg = [('gray', msg[0]), content, whitespace, ('gray', timestamp)]
+            if historic:
+                output.prepend(msg)
+            else:
+                output.add(msg)
+            break
+        elif char == "+":
+            msg = msg.split("+")
+            username = msg[0]
+            msg = "+ " + username + " has joined the chain"
+            whitespace = abs(columns - len(wrap(msg+timestamp, columns+1)[-1])) * " "
+            msg = [('green', msg), whitespace, ('gray', timestamp)]
+            if historic:
+                output.prepend(msg)
+                if username not in offline_people:
+                    online_people.add(username)
+            else:
+                output.add(msg)
+                online_people.add(username)
+                if type(offline_people) == set:
+                    offline_people = 0
+            break
+        elif char == "-":
+            msg = msg.split("-")
+            username = msg[0]
+            msg = "- " + username + " has left the chain"
+            whitespace = abs(columns - len(wrap(msg+timestamp, columns+1)[-1])) * " "
+            msg = [('red', msg), whitespace, ('gray', timestamp)]
+            if historic:
+                output.prepend(msg)
+                offline_people.add(username)
+            else:
+                output.add(msg)
+                online_people.remove(username)
+            break
+        elif char == "@":
+            msg = msg.split("@")
+            parser("@".join(msg[1:]), output, historic=True, timestamp=int(msg[0]))
+            break
+
+
 
 class ChatMessages(ListBox):
-    """ Show the last couple of chat messages as a scrolling list """
-
-    def __init__(self, chat):
-        self.chat = chat
+    def __init__(self):
         self.walker = SimpleFocusListWalker([])
         super(ChatMessages, self).__init__(self.walker)
 
     def add(self, message):
         self.walker.append(Text(message))
         self.set_focus(len(self.walker)-1)
+    
+    def prepend(self, message):
+        self.walker.insert(0, Text(message))
+        self.set_focus(0)
 
 
 class ChatInput(Edit):
-    """ Where the user types a message or commands """
-
-    def __init__(self, chat):
-        self.chat = chat
-        super(ChatInput, self).__init__(caption='> ')
+    def __init__(self, chatter, output):
+        self.ws = chatter
+        self.last_sent = time()
+        self.output = output
+        super(ChatInput, self).__init__(caption=[('input', config["username"]+": ")])
 
     def keypress(self, size, key):
         message = self.get_edit_text()
@@ -33,152 +156,48 @@ class ChatInput(Edit):
         if key == 'enter':
             if message == '':
                 return
-            if message[0] == '/':
-                self.chat.user_command(message[1:])
-            else:
-                self.chat.write_message(self.chat.nickname, message)
-                self.chat.send_message(message)
-            self.set_edit_text('')
+            if message.strip().lower() == "/online":
+                parser(config["username"] + ":" + "/online\nusers in the chain:\n" + ", ".join(online_people), self.output, timestamp="disable")
+                self.set_edit_text('')
+                return
+            elif len(message) > 500:
+                self.set_edit_text(f'too long! ({len(message)}/500)')
+                return
+            elif (time() - self.last_sent) > 0.5:
+                self.last_sent = time()
+                self.ws.send_message(message)
+                self.set_edit_text('')
+                return
 
         super(ChatInput, self).keypress(size, key)
 
 
-class Connection(object):
-
-    HANDSHAKE_INIT = 'HELO'
-    HANDSHAKE_RESPONSE = 'OHAI'
-
-    STATE_CONNECTING = 0
-    STATE_CONNECTED = 1
-    STATE_DISCONNECTED = 2
-
-    RECORD_SEPARATOR = '\x1e'
-
-    SERVER = 'localhost'
-    PORT = 9000
-
-    def __init__(self, chat):
-        self.state = self.STATE_CONNECTING
-        self.chat = chat
-        self.socket = gevent.socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    def handle(self, message):
-        if message[0] == self.HANDSHAKE_RESPONSE:
-            self.state = self.STATE_CONNECTED
-            self.chat.connected()
-        elif message[0] == 'MSG':
-            _, nickname, message = message
-            self.chat.write_message(nickname, message)
-        else:
-            self.chat.write("Unknown data received: %r" % message)
-
-    def parse_message(self, data):
-        return data.split(self.RECORD_SEPARATOR)
-
-    def connected(self):
-        return self.state == self.STATE_CONNECTED
-
-    def open(self):
-        self.socket.sendto(self.HANDSHAKE_INIT, (self.SERVER, self.PORT))
-        while True:
-            data = []
-            while True:
-                datagram = self.socket.recv(256)
-                if data != '':
-                    data.append(datagram)
-                if datagram == '' or datagram[-1] == '\x00':
-                    break
-            self.handle(self.parse_message(''.join(data)[:-1]))
-
-    def send(self, *args):
-        payload = self.RECORD_SEPARATOR.join(args) + '\x00'
-        self.socket.sendto(payload, (self.SERVER, self.PORT))
+def timeformat(date=None):
+    date = date or datetime.now()
+    return date.strftime("%X").strip()
 
 
-class Chat(object):
-    """ The main chat class. Connects the GUI pieces together. """
+palette = [('header', 'white', 'dark gray'), ('gray', 'light gray', ''), ('green', 'dark green', ''), ('red', 'dark red', ''), ('input', 'dark blue', '')]
 
-    def __init__(self, nickname):
-        self.nickname = nickname
-        self.output = ChatMessages(self)
-        self.message = ChatInput(self)
-        self.window = Frame(
-            body=self.output,
-            footer=self.message,
-            focus_part='footer'
-        )
-        self.main_loop = None
-        self.connection = Connection(self)
-
-    def connected(self):
-        self.write_status('Connected')
-
-    def send_message(self, message):
-        self.connection.send('MSG', self.nickname, message)
-
-    def write(self, message):
-        self.output.add(message)
-
-    def write_message(self, nickname, message):
-        self.write("%s <%s> %s" % (self.time(), nickname, message))
-
-    def write_status(self, message):
-        self.write("*** %s ***" % message)
-
-    def time(self, date=False):
-        format_string = '%X'
-        if date:
-            format_string = '%c'
-        return datetime.now().strftime(format_string).strip()
-
-    def user_command(self, command):
-        arguments = command.split(' ')
-        command = arguments.pop(0)
-
-        def _require_args(args, n):
-            if len(args) < n:
-                self.write("%s needs %d argument(s), %d given" %
-                           (command, n, len(args)))
-                return False
-            return True
-
-        def _quit():
-            raise ExitMainLoop()
-        def _unknown():
-            self.write('Unknown command %r' % command)
-        def _nickname(new_nickname):
-            self.nickname = new_nickname
-            self.write_status('Nickname changed to %r' % new_nickname)
-
-        command_map = {
-            'quit': (_quit, 0),
-            'nickname': (_nickname, 1)
-        }
-
-        command, args_needed = command_map.get(command, (_unknown, 0))
-        if _require_args(arguments, args_needed):
-            command(*arguments)
-
-    def connect(self):
-        self.write_status('Connecting')
-        self.connection.open()
-
-    def run(self):
-        """ Start the chat client """
-        self.write_status("Chat started at %s" % self.time(date=True))
-        self.main_loop = MainLoop(self.window, event_loop=GeventLoop())
-        gevent.spawn(self.connect)
-        self.main_loop.run()
-
+def main():
+    output = ChatMessages()
+    chatter = Chatter(output)
+    message = ChatInput(chatter, output)
+    banner = "chain (beta)"
+    banner = banner.center(columns+1)
+    window = Frame(
+        header=Text(('header', banner)),
+        body=output,
+        footer=message,
+        focus_part='footer'
+    )
+    loop = new_event_loop()
+    main_loop = MainLoop(window, palette, event_loop=AsyncioEventLoop(loop=loop))
+    chatter.run()
+    try:
+        main_loop.run()
+    except:
+        _exit(0)
 
 if __name__ == '__main__':
-
-    nickname = "Anonymous"
-    if len(sys.argv) > 1:
-        nickname = sys.argv[1]
-
-    chat = Chat(nickname)
-    try:
-        chat.run()
-    except KeyboardInterrupt:
-        chat.main_loop.stop()
+    main()
