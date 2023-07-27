@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ##### (you might need to add `python3 -m` before the command or `python -m`) 
 
 # Configuring
-## 1. .chain file
+## 1. .chain file (optional)
 The cli will always try to load configuration from it first. The file must be located in the same directory as the main.py file.
 
 The default .chain file looks like this:
@@ -27,5 +27,17 @@ username: (your username here)
 ```
 The file is already included in the repository.
 chain is the instance that the cli will connect to, defaults to official chain instance.
-username is the username it will try to connect with
+username is the username it will try to connect with.
 
+# Running the cli
+You just need to run the `main.py` file with `python` (or `python3`):
+```sh
+python main.py
+```
+You can also specify a username as an argument:
+```sh
+python main.py username
+```
+
+# Credits
+based on [this repository](https://github.com/andrelaszlo/gevent-chat/)
