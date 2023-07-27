@@ -22,5 +22,10 @@ The cli will always try to load configuration from it first. The file must be lo
 
 The default .chain file looks like this:
 ```
-
+chain: wss://chain.laptop-cat.repl.co/w
+username: (your username here)
 ```
+The file is already included in the repository.
+chain is the instance that the cli will connect to, defaults to official chain instance.
+username is the username it will try to connect with
+
