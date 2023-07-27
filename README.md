@@ -1,6 +1,7 @@
 # chain cli
 Command line interface for [Chain, a simple chatting app](https://github.com/LaptopCat/chain)
 
+![screenshot](screenshot.png)
 # Installing
 ## 1. Clone this repository
 You can do this using the git CLI (if you have it installed) or just download the zip file on the Code page.
