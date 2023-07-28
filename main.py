@@ -11,8 +11,15 @@ from shutil import get_terminal_size
 from time import time
 from textwrap import wrap
 dir = dirname(realpath(__file__))
+
+
+TITLE = "chain (beta)"
+MAX_LENGTH = 500
+RATE_LIMIT = 0.25
+
+
 columns = get_terminal_size().columns - 1
-stdout.write("\x1b]2;chain (beta)\x07") # tries to set console title
+stdout.write(f"\x1b]2;{TITLE}\x07") # tries to set console title
 online_people = set()
 offline_people = set()
 
@@ -81,7 +88,7 @@ def parser(msg, output, historic=False, timestamp=None):
         timestamp = ""
     else:
         timestamp = timeformat(datetime.fromtimestamp(datetime.now().timestamp() - timestamp))
-    for char in msg[1:13]:
+    for char in msg[:13]:
         if char == ":":
             msg = msg.split(":")
             msg[0] = msg[0] + ": "
@@ -95,7 +102,7 @@ def parser(msg, output, historic=False, timestamp=None):
             break
         elif char == "+":
             msg = msg.split("+")
-            username = msg[0]
+            username = msg[1]
             msg = "+ " + username + " has joined the chain"
             whitespace = abs(columns - len(wrap(msg+timestamp, columns+1)[-1])) * " "
             msg = [('green', msg), whitespace, ('gray', timestamp)]
@@ -111,7 +118,7 @@ def parser(msg, output, historic=False, timestamp=None):
             break
         elif char == "-":
             msg = msg.split("-")
-            username = msg[0]
+            username = msg[1]
             msg = "- " + username + " has left the chain"
             whitespace = abs(columns - len(wrap(msg+timestamp, columns+1)[-1])) * " "
             msg = [('red', msg), whitespace, ('gray', timestamp)]
@@ -160,10 +167,10 @@ class ChatInput(Edit):
                 parser(config["username"] + ":" + "/online\nusers in the chain:\n" + ", ".join(online_people), self.output, timestamp="disable")
                 self.set_edit_text('')
                 return
-            elif len(message) > 500:
-                self.set_edit_text(f'too long! ({len(message)}/500)')
+            elif len(message) > MAX_LENGTH:
+                self.set_edit_text(f'too long! ({len(message)}/{MAX_LENGTH})')
                 return
-            elif (time() - self.last_sent) > 0.5:
+            elif (time() - self.last_sent) > RATE_LIMIT:
                 self.last_sent = time()
                 self.ws.send_message(message)
                 self.set_edit_text('')
@@ -183,8 +190,7 @@ def main():
     output = ChatMessages()
     chatter = Chatter(output)
     message = ChatInput(chatter, output)
-    banner = "chain (beta)"
-    banner = banner.center(columns+1)
+    banner = TITLE.center(columns+1)
     window = Frame(
         header=Text(('header', banner)),
         body=output,
