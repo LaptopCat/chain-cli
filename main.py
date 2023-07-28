@@ -35,7 +35,7 @@ try:
     assert len(set(config.keys()) - {"chain", "username"}) == 0
     assert config["username"] != ""
 except:
-    config = {"chain": "wss://chain.laptop-cat.repl.co/w", "username": ""}
+    config = {"chain": "wss://chain.laptop-cat.repl.co", "username": ""}
 
 if len(argv) > 1:
     config["username"] = argv[1].strip().lower()
@@ -53,7 +53,7 @@ if not all(ch in "qwertyuiopasdfghjklzxcvbnm1234567890" for ch in config["userna
 
 async def wrapping(self, output):
     try:
-        async with connect(config["chain"] + "?u=" + config["username"]) as ws:
+        async with connect(config["chain"] + "/w?u=" + config["username"]) as ws:
             self.ws = ws
             async for msg in ws:
                 parser(msg, output)
