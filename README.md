@@ -23,7 +23,7 @@ The cli will always try to load configuration from it first. The file must be lo
 
 The default .chain file looks like this:
 ```
-chain: wss://chain.laptop-cat.repl.co/w
+chain: wss://chain.laptop-cat.repl.co
 username: (your username here)
 ```
 The file is already included in the repository.
