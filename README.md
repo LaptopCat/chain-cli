@@ -27,7 +27,9 @@ chain: wss://chain.laptop-cat.repl.co
 username: (your username here)
 ```
 The file is already included in the repository.
+
 chain is the instance that the cli will connect to, defaults to official chain instance.
+
 username is the username it will try to connect with.
 
 # Running the cli
