@@ -52,19 +52,16 @@ if not all(ch in "qwertyuiopasdfghjklzxcvbnm1234567890" for ch in config["userna
     exit(1)
 
 async def wrapping(self, output):
-    parsed_anything = False
     try:
         async with connect(config["chain"] + "?u=" + config["username"]) as ws:
             self.ws = ws
             async for msg in ws:
                 parser(msg, output)
-                if not parsed_anything:
-                    parsed_anything = True
-    except:
-        if not parsed_anything:
+    except Exception as e:
+        if "401" in str(e):
             print("username taken")
         else:
-            print("something went wrong")
+            print("lost link to chain ({}: {})".format(type(e).__name__, str(e)))
         _exit(1)
 
 class Chatter:
@@ -113,8 +110,8 @@ def parser(msg, output, historic=False, timestamp=None):
             else:
                 output.add(msg)
                 online_people.add(username)
-                if type(offline_people) == set:
-                    offline_people = 0
+                if username == config["username"]:
+                    del offline_people
             break
         elif char == "-":
             msg = msg.split("-")
